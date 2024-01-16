@@ -1,0 +1,557 @@
+#include <limits>
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <unistd.h>
+#include <termios.h>
+#include <fcntl.h>
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+ using namespace std;
+
+ 
+struct Player
+{
+  
+string name;
+  
+int score;
+ 
+};
+
+ 
+bool CompareScores (const Player & a, const Player & b)
+{
+  
+return a.score > b.score;
+
+}
+
+
+ 
+bool gameOver;
+
+const int width = 30;
+
+const int height = 15;
+
+int x, y, fruitX, fruitY, score;
+
+int tailX[100], tailY[100];
+
+int nTail;
+
+enum eDirection
+{ STOP = 0, UP, DOWN, LEFT, RIGHT };
+
+eDirection dir;
+
+int iterationsCounter = 0;
+
+const int iterationsLimit = 2;	// Adjust this to control snake speed
+
+void
+Setup ()
+{
+  
+gameOver = false;
+  
+dir = STOP;
+  
+x = width / 2;
+  
+y = height / 2;
+  
+fruitX = rand () % width;
+  
+fruitY = rand () % height;
+  
+score = 0;
+
+} 
+ 
+void
+
+Draw ()
+{
+  
+system ("clear");
+  
+ 
+for (int i = 0; i < width + 2; i++)
+    
+cout << "\033[32m#\033[0m";	// Green color for the grid borders
+  cout << endl;
+  
+ 
+for (int i = 0; i < height; i++)
+    {
+      
+for (int j = 0; j < width; j++)
+	{
+	  
+if (j == 0)
+	    
+cout << "\033[32m#\033[0m";	// Green color for the left border
+	  if (i == y && j == x)
+	    
+cout << "\033[34mO\033[0m";	// Blue color for the snake's head
+	  else if (i == fruitY && j == fruitX)
+	    
+cout << "\033[31mF\033[0m";	// Red color for the fruit
+	  else
+	    {
+	      
+bool printTail = false;
+	      
+for (int k = 0; k < nTail; k++)
+		{
+		  
+if (tailX[k] == j && tailY[k] == i)
+		    {
+		      
+cout << "\033[34mo\033[0m";	// Blue color for the snake's body
+		      printTail = true;
+		    
+}
+		
+}
+	      
+if (!printTail)
+		
+cout << " ";
+	    
+}
+	  
+ 
+if (j == width - 1)
+	    
+cout << "\033[32m#\033[0m";	// Green color for the right border
+	}
+      
+cout << endl;
+    
+}
+  
+ 
+for (int i = 0; i < width + 2; i++)
+    
+cout << "\033[32m#\033[0m";	// Green color for the grid borders
+  cout << endl;
+  
+ 
+cout << "Score:" << score << endl;
+
+} 
+ 
+void
+
+SetNonBlocking (bool value)
+{
+  
+struct termios ttystate;
+  
+ 
+    // Get the terminal state
+    tcgetattr (STDIN_FILENO, &ttystate);
+  
+ 
+if (value)
+    {
+      
+	// Turn off canonical mode (non-blocking input)
+	ttystate.c_lflag &= ~ICANON;
+      
+ttystate.c_cc[VMIN] = 0;
+      
+ttystate.c_cc[VTIME] = 0;
+    
+}
+  else
+    {
+      
+	// Turn on canonical mode (normal input)
+	ttystate.c_lflag |= ICANON;
+    
+}
+  
+ 
+    // Set the terminal state back
+    tcsetattr (STDIN_FILENO, TCSANOW, &ttystate);
+
+}
+
+
+ 
+void
+WaitForEnter ()
+{
+  
+cout << "Press Enter to play...";
+  
+while (true)
+    {
+      
+char c;
+      
+if (read (STDIN_FILENO, &c, 1) > 0 && c == '\n')
+	{
+	  
+break;
+	
+}
+    
+}
+
+}
+
+
+ 
+void
+ClearInputBuffer ()
+{
+  
+cin.clear ();
+  
+cin.ignore (numeric_limits < streamsize >::max (), '\n');
+
+} 
+ 
+string GetPlayerName ()
+{
+  
+string name;
+  
+cout << "Enter your name: ";
+  
+getline (cin, name);
+  
+return name;
+
+}
+
+
+ 
+void
+SaveScore (const Player & player)
+{
+  
+ofstream file ("leaderboard.txt", ios::app);
+  
+if (file.is_open ())
+    {
+      
+file << player.name << " " << player.score << endl;
+      
+file.close ();
+    
+}
+  else
+    {
+      
+cout << "Unable to open the leaderboard file." << endl;
+    
+}
+
+}
+
+
+ 
+vector < Player > LoadLeaderboard ()
+{
+  
+vector < Player > leaderboard;
+  
+ifstream file ("leaderboard.txt");
+  
+if (file.is_open ())
+    {
+      
+Player player;
+      
+while (file >> player.name >> player.score)
+	{
+	  
+leaderboard.push_back (player);
+	
+}
+      
+file.close ();
+    
+}
+  
+return leaderboard;
+
+}
+
+
+ 
+void
+DisplayLeaderboard (const vector < Player > &leaderboard)
+{
+  
+cout << "\nLeaderboard:\n";
+  
+cout << "---------------------------------\n";
+  
+cout << "Name\t\tScore\n";
+  
+cout << "---------------------------------\n";
+
+for (const Player & player:leaderboard)
+    {
+      
+cout << player.name << "\t\t" << player.score << endl;
+    
+} 
+cout << "---------------------------------\n";
+
+} 
+ 
+void
+
+Input ()
+{
+  
+SetNonBlocking (true);
+  
+ 
+char c;
+  
+if (read (STDIN_FILENO, &c, 1) > 0)
+    {
+      
+switch (c)
+	{
+	
+case 'w':
+	  
+if (dir != DOWN)
+	    
+dir = UP;
+	  
+break;
+	
+case 's':
+	  
+if (dir != UP)
+	    
+dir = DOWN;
+	  
+break;
+	
+case 'a':
+	  
+if (dir != RIGHT)
+	    
+dir = LEFT;
+	  
+break;
+	
+case 'd':
+	  
+if (dir != LEFT)
+	    
+dir = RIGHT;
+	  
+break;
+	
+case 'x':
+	  
+gameOver = true;
+	  
+break;
+	
+}
+    
+}
+  
+ 
+SetNonBlocking (false);
+
+}
+
+
+ 
+void
+Algorithm ()
+{
+  
+iterationsCounter++;
+  
+if (iterationsCounter < iterationsLimit)
+    {
+      
+return;			// Skip the movement logic until enough iterations
+    }
+  
+ 
+int prevX = tailX[0];
+  
+int prevY = tailY[0];
+  
+int prev2X, prev2Y;
+  
+tailX[0] = x;
+  
+tailY[0] = y;
+  
+for (int i = 1; i < nTail; i++)
+    {
+      
+prev2X = tailX[i];
+      
+prev2Y = tailY[i];
+      
+tailX[i] = prevX;
+      
+tailY[i] = prevY;
+      
+prevX = prev2X;
+      
+prevY = prev2Y;
+    
+} 
+switch (dir)
+    {
+    
+case UP:
+      
+y--;
+      
+break;
+    
+case DOWN:
+      
+y++;
+      
+break;
+    
+case LEFT:
+      
+x--;
+      
+break;
+    
+case RIGHT:
+      
+x++;
+      
+break;
+    
+default:
+      
+break;
+    
+}
+  
+ 
+    // Check if the snake hits the wall or its own body
+    if (x < 0 || x >= width || y < 0 || y >= height)
+    {
+      
+gameOver = true;
+    
+}
+  
+ 
+for (int i = 0; i < nTail; i++)
+    
+if (tailX[i] == x && tailY[i] == y)
+      
+gameOver = true;
+  
+ 
+if (x == fruitX && y == fruitY)
+    {
+      
+score += 1;		// Increase the score by 1 for each fruit
+      fruitX = rand () % width;
+      
+fruitY = rand () % height;
+      
+nTail++;
+    
+}
+  
+ 
+iterationsCounter = 0;	// Reset the counter after performing the movement logic
+}
+
+
+ 
+int
+main ()
+{
+  
+srand (static_cast < unsigned >(time (nullptr)));
+  
+ 
+while (true)
+    {
+      
+Setup ();
+      
+WaitForEnter ();		// Wait for Enter key to start the game
+      ClearInputBuffer ();	// Clear input buffer before getting the player's name
+      string playerName = GetPlayerName ();
+      
+ 
+while (!gameOver)
+	{
+	  
+Draw ();
+	  
+Input ();
+	  
+Algorithm ();
+	  
+usleep (50000);	// Sleep for 50 milliseconds (0.05 seconds) for smoother movement
+	}
+      
+ 
+cout << "Game Over! Your final score is: " << score << endl;
+      
+ 
+	// Save player's score to leaderboard
+	Player currentPlayer;
+      
+currentPlayer.name = playerName;
+      
+currentPlayer.score = score;
+      
+SaveScore (currentPlayer);
+      
+ 
+	// Load and display the leaderboard
+	vector < Player > leaderboard = LoadLeaderboard ();
+      
+sort (leaderboard.begin (), leaderboard.end (), CompareScores);
+      
+DisplayLeaderboard (leaderboard);
+      
+ 
+	// Ask if the player wants to play again
+	cout << "Do you want to play again? (y/n): ";
+      
+char response;
+      
+cin >> response;
+      
+if (response != 'y' && response != 'Y')
+	{
+	  
+break;
+	
+}
+    
+}
+  
+ 
+return 0;
+
+}
+
+
